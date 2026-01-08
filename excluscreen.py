@@ -5,14 +5,6 @@ DNA Primer Exclusivity Screener - Version 3
 A Tkinter GUI application that analyzes DNA primer sequences using NCBI BLASTN,
 identifies binding sites, and finds potential primer pair hits on the same sequences.
 
-VERSION 3 CHANGES (Inclusive Search Paradigm):
-- Removed restrictive 3' end matching requirements
-- User-definable BLAST parameters: coverage and identity thresholds
-- Simplified hit detection: finds any two primer hits on the same entry within
-  a user-defined maximum distance, regardless of strand orientation
-- More inclusive approach catches potential off-target binding that might be
-  missed by strict amplicon-oriented searches
-
 Transferred over to new project with version control: excluscreen_v2.
 
 Author: Claude AI Assistant (Opus 4.5)

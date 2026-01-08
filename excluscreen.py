@@ -328,7 +328,7 @@ def submit_blast_query(sequence: str, database: str = "nt",
         return None
 
 
-def poll_blast_results(rid: str, poll_interval: int = 10,
+def poll_blast_results(rid: str, poll_interval: int = 30,
                        max_attempts: int = 60,
                        email: str = "user@example.com",
                        callback=None) -> Optional[str]:
@@ -1206,7 +1206,7 @@ TAGCTAGCTAGCTAGCTAGC"""
 
                 xml_results = poll_blast_results(
                     rid,
-                    poll_interval=7,
+                    poll_interval=30,
                     email=email,
                     callback=self.log_status
                 )

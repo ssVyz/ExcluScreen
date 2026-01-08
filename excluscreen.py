@@ -669,14 +669,16 @@ def export_to_csv(pairs: List[HitPair], filepath: str) -> bool:
                 unique_pairs[key] = {'example': pair.subject_id, 'title': pair.subject_title, 'count': 1}
             else:
                 unique_pairs[key]['count'] += 1
+                # Update title if current one is empty and we have a better one
+                if not unique_pairs[key].get('title') and pair.subject_title:
+                    unique_pairs[key]['title'] = pair.subject_title
 
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
 
             writer.writerow([
                 'Example_Accession',
-                'Subject_Title',
-                'TaxID',
+                'Accession_Name',
                 'Accession_Count',
                 'Primer_1',
                 'Primer_2',
@@ -694,8 +696,7 @@ def export_to_csv(pairs: List[HitPair], filepath: str) -> bool:
                 primer1, primer2, distance, orientation, p1_id, p2_id, p1_cov, p2_cov, p1_mm, p2_mm, taxid = key
                 writer.writerow([
                     info['example'],
-                    info['title'][:50] if info['title'] else 'N/A',
-                    taxid if taxid else 'N/A',
+                    info.get('title', 'N/A')[:100] if info.get('title') else 'N/A',
                     info['count'],
                     primer1,
                     primer2,
@@ -760,10 +761,18 @@ class PrimerBlastApp:
         main_frame.rowconfigure(4, weight=2)
 
         # === Primer Input Section ===
-        input_label = ttk.Label(main_frame,
+        input_header_frame = ttk.Frame(main_frame)
+        input_header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        input_header_frame.columnconfigure(0, weight=1)
+        
+        input_label = ttk.Label(input_header_frame,
                                 text="Primer Sequences (FASTA format or one per line):",
                                 font=('TkDefaultFont', 10, 'bold'))
-        input_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
+        input_label.grid(row=0, column=0, sticky="w")
+        
+        self.import_button = ttk.Button(input_header_frame, text="Import FASTA File",
+                                        command=self.import_fasta_file)
+        self.import_button.grid(row=0, column=1, sticky="e", padx=(10, 0))
 
         self.primer_text = scrolledtext.ScrolledText(main_frame, height=8, width=80,
                                                      wrap=tk.WORD)
@@ -895,15 +904,34 @@ ATATATATGCGCGCGCGC"""
         pairs_frame = ttk.Frame(self.results_notebook)
         self.results_notebook.add(pairs_frame, text="Hit Pairs")
         pairs_frame.columnconfigure(0, weight=1)
-        pairs_frame.rowconfigure(0, weight=1)
+        pairs_frame.rowconfigure(1, weight=1)
 
-        columns = ('subject', 'taxid', 'count', 'primer1', 'primer2', 'distance',
+        # Filter frame for convergent pairs only
+        filter_frame = ttk.Frame(pairs_frame)
+        filter_frame.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        
+        self.filter_convergent_var = tk.BooleanVar(value=False)
+        self.filter_checkbox = ttk.Checkbutton(
+            filter_frame,
+            text="Show only convergent pairs",
+            variable=self.filter_convergent_var,
+            command=self.update_displayed_pairs
+        )
+        self.filter_checkbox.pack(side="left")
+        
+        # Treeview frame with scrollbars
+        pairs_tree_frame = ttk.Frame(pairs_frame)
+        pairs_tree_frame.grid(row=1, column=0, sticky="nsew")
+        pairs_tree_frame.columnconfigure(0, weight=1)
+        pairs_tree_frame.rowconfigure(0, weight=1)
+        
+        columns = ('subject', 'subject_name', 'count', 'primer1', 'primer2', 'distance',
                    'orientation', 'p1_id', 'p2_id', 'p1_cov', 'p2_cov')
-        self.pairs_tree = ttk.Treeview(pairs_frame, columns=columns, show='headings',
+        self.pairs_tree = ttk.Treeview(pairs_tree_frame, columns=columns, show='headings',
                                        selectmode='browse')
 
         self.pairs_tree.heading('subject', text='Example Accession')
-        self.pairs_tree.heading('taxid', text='TaxID')
+        self.pairs_tree.heading('subject_name', text='Accession Name')
         self.pairs_tree.heading('count', text='Count')
         self.pairs_tree.heading('primer1', text='Primer 1')
         self.pairs_tree.heading('primer2', text='Primer 2')
@@ -915,7 +943,7 @@ ATATATATGCGCGCGCGC"""
         self.pairs_tree.heading('p2_cov', text='P2 Cov%')
 
         self.pairs_tree.column('subject', width=120, minwidth=80)
-        self.pairs_tree.column('taxid', width=60, minwidth=50)
+        self.pairs_tree.column('subject_name', width=200, minwidth=100)
         self.pairs_tree.column('count', width=50, minwidth=40)
         self.pairs_tree.column('primer1', width=80, minwidth=60)
         self.pairs_tree.column('primer2', width=80, minwidth=60)
@@ -926,13 +954,13 @@ ATATATATGCGCGCGCGC"""
         self.pairs_tree.column('p1_cov', width=60, minwidth=45)
         self.pairs_tree.column('p2_cov', width=60, minwidth=45)
 
-        pairs_yscroll = ttk.Scrollbar(pairs_frame, orient="vertical",
+        pairs_yscroll = ttk.Scrollbar(pairs_tree_frame, orient="vertical",
                                       command=self.pairs_tree.yview)
-        pairs_xscroll = ttk.Scrollbar(pairs_frame, orient="horizontal",
+        pairs_xscroll = ttk.Scrollbar(pairs_tree_frame, orient="horizontal",
                                       command=self.pairs_tree.xview)
         self.pairs_tree.configure(yscrollcommand=pairs_yscroll.set,
                                   xscrollcommand=pairs_xscroll.set)
-
+        
         self.pairs_tree.grid(row=0, column=0, sticky="nsew")
         pairs_yscroll.grid(row=0, column=1, sticky="ns")
         pairs_xscroll.grid(row=1, column=0, sticky="ew")
@@ -972,6 +1000,29 @@ ATCGATCGATCGATCGATCG
 TAGCTAGCTAGCTAGCTAGC"""
             self.primer_text.insert("1.0", placeholder)
             self.primer_text.config(fg='gray')
+    
+    def import_fasta_file(self):
+        """Import primer sequences from a FASTA file."""
+        filepath = filedialog.askopenfilename(
+            title="Import FASTA File",
+            filetypes=[("FASTA files", "*.fa *.fasta *.fas *.txt"), ("All files", "*.*")]
+        )
+        
+        if filepath:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                if content.strip():
+                    self.primer_text.config(state='normal', fg='black')
+                    self.primer_text.delete("1.0", tk.END)
+                    self.primer_text.insert("1.0", content)
+                    self.primer_text.config(state='normal')
+                    self.log_status(f"Imported FASTA file: {filepath}")
+                else:
+                    messagebox.showwarning("Empty File", "The selected file is empty.")
+            except Exception as e:
+                messagebox.showerror("Import Error", f"Failed to import file:\n{str(e)}")
 
     def log_status(self, message: str):
         """Add a message to the status log (thread-safe)."""
@@ -1244,7 +1295,7 @@ TAGCTAGCTAGCTAGCTAGC"""
         self.all_pairs = all_pairs
         self.all_hits = hits_by_primer
 
-        self._do_display_pairs(all_pairs)
+        self._do_display_pairs(all_pairs)  # This will now use update_displayed_pairs internally
 
         # Calculate unique patterns
         unique_patterns = set()
@@ -1342,28 +1393,40 @@ TAGCTAGCTAGCTAGCTAGC"""
 
     def _do_display_pairs(self, pairs: List[HitPair]):
         """Actually display hit pairs (must be called from main thread)."""
+        # Store all pairs for filtering
+        self.all_pairs = pairs
+        self.update_displayed_pairs()
+    
+    def update_displayed_pairs(self):
+        """Update the displayed pairs based on the filter setting."""
         for item in self.pairs_tree.get_children():
             self.pairs_tree.delete(item)
 
+        # Apply filter if enabled
+        pairs_to_display = self.all_pairs
+        if self.filter_convergent_var.get():
+            pairs_to_display = [p for p in self.all_pairs if p.orientation == 'convergent']
+
         unique_pairs = {}
-        for pair in pairs:
+        for pair in pairs_to_display:
             key = get_normalized_pair_key(pair)
             if key not in unique_pairs:
-                unique_pairs[key] = {'example': pair.subject_id, 'count': 1}
+                unique_pairs[key] = {'example': pair.subject_id, 'title': pair.subject_title, 'count': 1}
             else:
                 unique_pairs[key]['count'] += 1
 
         for key, info in unique_pairs.items():
             primer1, primer2, distance, orientation, p1_id, p2_id, p1_cov, p2_cov, p1_mm, p2_mm, taxid = key
             example_accession = info['example']
+            subject_title = info.get('title', 'N/A')
             count = info['count']
 
             subject_display = example_accession[:20] + "..." if len(example_accession) > 20 else example_accession
-            taxid_display = str(taxid) if taxid else "N/A"
+            title_display = subject_title[:50] + "..." if len(subject_title) > 50 else (subject_title if subject_title else 'N/A')
 
             self.pairs_tree.insert('', tk.END, values=(
                 subject_display,
-                taxid_display,
+                title_display,
                 count,
                 primer1,
                 primer2,
@@ -1376,8 +1439,13 @@ TAGCTAGCTAGCTAGCTAGC"""
             ))
 
     def export_results(self):
-        """Export hit pair results to CSV file."""
-        if not self.all_pairs:
+        """Export hit pair results to CSV file (exports what is currently displayed)."""
+        # Get currently displayed pairs (respecting filter)
+        pairs_to_export = self.all_pairs
+        if self.filter_convergent_var.get():
+            pairs_to_export = [p for p in self.all_pairs if p.orientation == 'convergent']
+        
+        if not pairs_to_export:
             messagebox.showwarning("No Results", "No hit pairs to export.")
             return
 
@@ -1388,11 +1456,13 @@ TAGCTAGCTAGCTAGCTAGC"""
         )
 
         if filepath:
-            success = export_to_csv(self.all_pairs, filepath)
+            success = export_to_csv(pairs_to_export, filepath)
             if success:
-                self.log_status(f"Results exported to: {filepath}")
+                filter_status = " (filtered: convergent pairs only)" if self.filter_convergent_var.get() else ""
+                self.log_status(f"Results exported to: {filepath}{filter_status}")
                 messagebox.showinfo("Export Complete",
-                                    f"Results exported to:\n{filepath}")
+                                    f"Results exported to:\n{filepath}\n\n"
+                                    f"Exported {len(pairs_to_export)} hit pairs.")
             else:
                 messagebox.showerror("Export Failed",
                                      "Failed to export results. Check file permissions.")

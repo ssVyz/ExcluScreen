@@ -13,6 +13,8 @@ VERSION 3 CHANGES (Inclusive Search Paradigm):
 - More inclusive approach catches potential off-target binding that might be
   missed by strict amplicon-oriented searches
 
+Transferred over to new project with version control: excluscreen_v2.
+
 Author: Claude AI Assistant (Opus 4.5)
 License: To be determined
 

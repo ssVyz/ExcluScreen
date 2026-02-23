@@ -762,9 +762,13 @@ class PrimerBlastApp:
                                 font=('TkDefaultFont', 10, 'bold'))
         input_label.grid(row=0, column=0, sticky="w")
         
+        self.inspect_button = ttk.Button(input_header_frame, text="Inspect FASTA",
+                                         command=self.inspect_fasta)
+        self.inspect_button.grid(row=0, column=1, sticky="e", padx=(10, 0))
+
         self.import_button = ttk.Button(input_header_frame, text="Import FASTA File",
                                         command=self.import_fasta_file)
-        self.import_button.grid(row=0, column=1, sticky="e", padx=(10, 0))
+        self.import_button.grid(row=0, column=2, sticky="e", padx=(5, 0))
 
         self.primer_text = scrolledtext.ScrolledText(main_frame, height=8, width=80,
                                                      wrap=tk.WORD)
@@ -993,6 +997,81 @@ TAGCTAGCTAGCTAGCTAGC"""
             self.primer_text.insert("1.0", placeholder)
             self.primer_text.config(fg='gray')
     
+    def inspect_fasta(self):
+        """Inspect the current primer input, parsing it the same way the analysis does."""
+        print("[DEBUG][inspect_fasta] --- Inspect FASTA triggered ---")
+
+        raw_text = self.primer_text.get("1.0", tk.END).strip()
+        print(f"[DEBUG][inspect_fasta] Raw text length: {len(raw_text)} chars")
+
+        if not raw_text or self.primer_text.cget('fg') == 'gray':
+            print("[DEBUG][inspect_fasta] No input text or placeholder is active")
+            messagebox.showwarning("No Input", "No primer sequences to inspect.\n"
+                                   "Enter sequences or import a FASTA file first.")
+            return
+
+        print(f"[DEBUG][inspect_fasta] Raw text preview (first 200 chars):\n{raw_text[:200]}")
+
+        lines = raw_text.split('\n')
+        print(f"[DEBUG][inspect_fasta] Total lines in input: {len(lines)}")
+        for i, line in enumerate(lines):
+            print(f"[DEBUG][inspect_fasta]   Line {i}: {repr(line)}")
+
+        primers = parse_primer_input(raw_text)
+        print(f"[DEBUG][inspect_fasta] parse_primer_input returned {len(primers)} primer(s)")
+
+        for p in primers:
+            print(f"[DEBUG][inspect_fasta]   [{p.index}] name={repr(p.name)}  "
+                  f"seq={p.sequence}  len={len(p.sequence)}")
+
+        # --- Build inspection dialog ---
+        dialog = tk.Toplevel(self.root)
+        dialog.title("FASTA Inspection")
+        dialog.geometry("700x500")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Summary label
+        summary = f"Parsed {len(primers)} oligo(s) from input ({len(lines)} lines)"
+        ttk.Label(dialog, text=summary, font=('TkDefaultFont', 10, 'bold')).pack(
+            anchor="w", padx=10, pady=(10, 5))
+
+        # Scrollable frame with results
+        container = ttk.Frame(dialog)
+        container.pack(fill="both", expand=True, padx=10, pady=5)
+
+        text_widget = scrolledtext.ScrolledText(container, wrap=tk.WORD, state='normal',
+                                                 font=('Consolas', 10))
+        text_widget.pack(fill="both", expand=True)
+
+        if primers:
+            for p in primers:
+                valid = is_valid_dna(p.sequence)
+                status = "OK" if valid else "INVALID DNA"
+                text_widget.insert(tk.END, f"--- Oligo #{p.index + 1} ---\n")
+                text_widget.insert(tk.END, f"  Name:     {p.name}\n")
+                text_widget.insert(tk.END, f"  Sequence: {p.sequence}\n")
+                text_widget.insert(tk.END, f"  Length:   {len(p.sequence)} bp\n")
+                text_widget.insert(tk.END, f"  Status:   {status}\n\n")
+        else:
+            text_widget.insert(tk.END, "No oligos could be parsed from the input.\n\n")
+            text_widget.insert(tk.END, "Possible reasons:\n")
+            text_widget.insert(tk.END, "  - Sequences contain invalid characters\n")
+            text_widget.insert(tk.END, "  - FASTA headers (>) are missing or malformed\n")
+            text_widget.insert(tk.END, "  - Input is empty or only whitespace\n")
+
+            # Show lines that failed to parse for debugging
+            text_widget.insert(tk.END, "\n--- Raw lines for debugging ---\n")
+            for i, line in enumerate(lines):
+                text_widget.insert(tk.END, f"  Line {i}: {repr(line)}\n")
+
+        text_widget.config(state='disabled')
+
+        # Close button
+        ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=(5, 10))
+
+        print("[DEBUG][inspect_fasta] --- Inspection dialog opened ---")
+
     def import_fasta_file(self):
         """Import primer sequences from a FASTA file."""
         filepath = filedialog.askopenfilename(
